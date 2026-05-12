@@ -1,0 +1,7 @@
+celery[redis]
+fastapi
+httpx
+motor
+pydantic-settings
+dnspython
+uvicorn[standard]
