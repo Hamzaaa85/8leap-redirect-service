@@ -26,6 +26,9 @@ class Settings(BaseSettings):
 
     request_timeout_seconds: int = 30
     max_concurrency: int = 10
+    redirect_check_chunk_size: int = 50
+    redirect_check_delay_between_checks_seconds: float = 1.0
+    redirect_check_delay_between_chunks_seconds: int = 30
     bot_user_agents_csv: str = (
         "OAI-SearchBot,ChatGPT-User,Claude-SearchBot,PerplexityBot"
     )
@@ -34,6 +37,23 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_base_url(cls, value: str) -> str:
         return value.rstrip("/")
+
+    @field_validator("redirect_check_chunk_size")
+    @classmethod
+    def validate_chunk_size(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("Redirect check chunk size must be at least 1")
+        return value
+
+    @field_validator(
+        "redirect_check_delay_between_checks_seconds",
+        "redirect_check_delay_between_chunks_seconds",
+    )
+    @classmethod
+    def validate_redirect_check_delays(cls, value: int | float) -> int | float:
+        if value < 0:
+            raise ValueError("Redirect check delays cannot be negative")
+        return value
 
     @property
     def bot_user_agents(self) -> list[str]:

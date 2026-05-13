@@ -7,6 +7,7 @@ from app.repositories.object_ids import parse_object_id
 from app.repositories.redirect_check_runs import (
     finalize_redirect_check_result,
     get_redirect_check_run_by_id,
+    has_queued_results_for_run,
     list_queued_results_for_run,
     mark_redirect_check_result_running,
     mark_redirect_check_run_running,
@@ -32,9 +33,13 @@ async def process_redirect_check_run_async(run_id: str) -> dict:
             return {"status": "failed", "error": "Redirect check run not found"}
 
         await mark_redirect_check_run_running(database, object_id)
-        queued_results = await list_queued_results_for_run(database, object_id)
+        queued_results = await list_queued_results_for_run(
+            database,
+            object_id,
+            limit=settings.redirect_check_chunk_size,
+        )
 
-        for result in queued_results:
+        for index, result in enumerate(queued_results):
             await mark_redirect_check_result_running(database, result["_id"])
 
             outcome = await check_redirect_result(
@@ -56,11 +61,29 @@ async def process_redirect_check_run_async(run_id: str) -> dict:
             )
             await refresh_redirect_check_run_counts(database, object_id)
 
+            is_last_result = index == len(queued_results) - 1
+            if (
+                not is_last_result
+                and settings.redirect_check_delay_between_checks_seconds > 0
+            ):
+                await asyncio.sleep(
+                    settings.redirect_check_delay_between_checks_seconds
+                )
+
         final_counts = await refresh_redirect_check_run_counts(database, object_id)
+        has_more_queued = await has_queued_results_for_run(database, object_id)
+
+        if has_more_queued:
+            process_redirect_check_run.apply_async(
+                args=[run_id],
+                countdown=settings.redirect_check_delay_between_chunks_seconds,
+            )
+
         return {
-            "status": "completed",
+            "status": "chunk_completed" if has_more_queued else "completed",
             "run_id": run_id,
             "processed": len(queued_results),
+            "scheduled_next_chunk": has_more_queued,
             "counts": final_counts,
         }
     finally:

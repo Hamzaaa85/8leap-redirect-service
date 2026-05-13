@@ -167,6 +167,8 @@ async def mark_redirect_check_run_running(
 async def list_queued_results_for_run(
     database: AsyncIOMotorDatabase,
     run_id: ObjectId,
+    *,
+    limit: int | None = None,
 ) -> list[dict]:
     cursor = database.redirect_check_results.find(
         {
@@ -174,7 +176,23 @@ async def list_queued_results_for_run(
             "status": "queued",
         }
     ).sort("created_at", 1)
-    return await cursor.to_list(length=None)
+    if limit is not None:
+        cursor = cursor.limit(limit)
+    return await cursor.to_list(length=limit)
+
+
+async def has_queued_results_for_run(
+    database: AsyncIOMotorDatabase,
+    run_id: ObjectId,
+) -> bool:
+    result = await database.redirect_check_results.find_one(
+        {
+            "run_id": run_id,
+            "status": "queued",
+        },
+        {"_id": 1},
+    )
+    return result is not None
 
 
 async def mark_redirect_check_result_running(
