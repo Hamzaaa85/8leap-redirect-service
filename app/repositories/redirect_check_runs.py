@@ -124,6 +124,20 @@ async def get_redirect_check_run_by_id(
     return await database.redirect_check_runs.find_one({"_id": object_id})
 
 
+async def get_latest_redirect_check_run_for_website(
+    database: AsyncIOMotorDatabase,
+    website_id: str,
+) -> dict | None:
+    object_id = parse_object_id(website_id)
+    if object_id is None:
+        return None
+
+    return await database.redirect_check_runs.find_one(
+        {"website_id": object_id},
+        sort=[("created_at", -1)],
+    )
+
+
 async def list_redirect_check_results(
     database: AsyncIOMotorDatabase,
     run_id: str,

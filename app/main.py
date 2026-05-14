@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.dev import router as dev_router
 from app.api.redirect_check_runs import router as redirect_check_runs_router
@@ -26,6 +27,15 @@ app = FastAPI(
     version=settings.app_version,
     lifespan=lifespan,
 )
+
+if settings.cors_allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allowed_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+    )
 
 app.include_router(dev_router)
 app.include_router(redirect_check_runs_router)

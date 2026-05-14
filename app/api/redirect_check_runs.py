@@ -5,6 +5,7 @@ from app.db import get_database
 from app.repositories.pages import list_all_active_pages_for_website
 from app.repositories.redirect_check_runs import (
     create_redirect_check_run,
+    get_latest_redirect_check_run_for_website,
     get_redirect_check_run_by_id,
     list_redirect_check_results,
 )
@@ -60,6 +61,14 @@ async def create_run(payload: CreateRedirectCheckRunRequest) -> dict:
         "run": serialize_document(run),
         "task_id": task_id,
     }
+
+
+@router.get("/latest")
+async def get_latest_run(website_id: str = Query(..., min_length=1)) -> dict:
+    database = get_database()
+
+    run = await get_latest_redirect_check_run_for_website(database, website_id)
+    return {"run": serialize_document(run) if run else None}
 
 
 @router.get("/{run_id}")

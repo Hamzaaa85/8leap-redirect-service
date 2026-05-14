@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     aiweave_base_url: str = "https://aiweave.app"
     redis_url: str = "redis://localhost:6379/0"
     celery_result_expires_seconds: int = 3600
+    cors_allowed_origins_csv: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     request_timeout_seconds: int = 30
     max_concurrency: int = 10
@@ -61,6 +62,14 @@ class Settings(BaseSettings):
             user_agent.strip()
             for user_agent in self.bot_user_agents_csv.split(",")
             if user_agent.strip()
+        ]
+
+    @property
+    def cors_allowed_origins(self) -> list[str]:
+        return [
+            origin.strip().rstrip("/")
+            for origin in self.cors_allowed_origins_csv.split(",")
+            if origin.strip()
         ]
 
 
