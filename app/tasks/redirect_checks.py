@@ -1,8 +1,16 @@
 import asyncio
 
+from pymongo.errors import (
+    AutoReconnect,
+    ConnectionFailure,
+    InvalidOperation,
+    NetworkTimeout,
+    ServerSelectionTimeoutError,
+)
+
 from app.celery_app import celery_app
 from app.config import get_settings
-from app.db import close_mongo_connection, connect_to_mongo, get_database
+from app.db import mongo_connection
 from app.repositories.object_ids import parse_object_id
 from app.repositories.redirect_check_runs import (
     finalize_redirect_check_result,
@@ -18,16 +26,22 @@ from app.services.redirect_checker import check_redirect_result
 
 settings = get_settings()
 
+_CELERY_RETRYABLE_ERRORS = (
+    ConnectionFailure,
+    ServerSelectionTimeoutError,
+    NetworkTimeout,
+    AutoReconnect,
+    InvalidOperation,
+    RuntimeError,
+)
+
 
 async def process_redirect_check_run_async(run_id: str) -> dict:
     object_id = parse_object_id(run_id)
     if object_id is None:
         return {"status": "failed", "error": "Invalid run id"}
 
-    await connect_to_mongo(settings)
-    database = get_database()
-
-    try:
+    async with mongo_connection(settings) as database:
         run = await get_redirect_check_run_by_id(database, run_id)
         if run is None:
             return {"status": "failed", "error": "Redirect check run not found"}
@@ -86,10 +100,16 @@ async def process_redirect_check_run_async(run_id: str) -> dict:
             "scheduled_next_chunk": has_more_queued,
             "counts": final_counts,
         }
-    finally:
-        await close_mongo_connection()
 
 
-@celery_app.task(name="redirect_checks.process_run")
-def process_redirect_check_run(run_id: str) -> dict:
+@celery_app.task(
+    bind=True,
+    name="redirect_checks.process_run",
+    autoretry_for=_CELERY_RETRYABLE_ERRORS,
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+    max_retries=5,
+)
+def process_redirect_check_run(self, run_id: str) -> dict:
     return asyncio.run(process_redirect_check_run_async(run_id))
